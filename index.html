@@ -464,7 +464,9 @@ let currentYear = '2026';
 let monthlyChart = null;
 let historyChart = null;
 let selectedMonth = null;
-let API_URL = localStorage.getItem('vaad_api_url') || 'https://script.google.com/macros/s/AKfycbwgReUAqKEboUuXgc1cnPtncODodvDsHTEGQkww6imoE7lUjj9QFrCIvw9CyYX8Bv3W/exec';
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbwgReUAqKEboUuXgc1cnPtncODodvDsHTEGQkww6imoE7lUjj9QFrCIvw9CyYX8Bv3W/exec';
+localStorage.setItem('vaad_api_url', DEFAULT_API);
+let API_URL = DEFAULT_API;
 let isAdmin = sessionStorage.getItem('vaad_admin') === '1';
 
 const ADMIN_HASH = '7f9b2c4d1e8a3f6c'; // ישונה בהגדרה
