@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>ועד בית גבולות 2 – גבעתיים</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ועד בית" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <meta name="theme-color" content="#1a56db" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    /* ===== Editable cells ===== */
+    .editable { cursor: pointer; border-radius: 4px; transition: background 0.1s; }
+    .editable:hover { background: #fffbeb; outline: 1px dashed #c27803; }
+    .cell-input {
+      width: 70px; border: 2px solid var(--primary); border-radius: 4px;
+      padding: 2px 4px; font-size: 13px; font-weight: 600; text-align: center;
+      outline: none; background: white;
+    }
+    .cell-input.saving { border-color: #34d399; background: #f0fdf4; }
+    .cell-input.error  { border-color: var(--danger); background: #fef2f2; }
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #1f2937; color: white; padding: 10px 20px; border-radius: 8px;
+      font-size: 14px; opacity: 0; transition: opacity 0.3s; z-index: 999; pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+    /* Settings bar */
+    #settingsBar {
+      background: #fef9c3; border-bottom: 1px solid #fde68a;
+      padding: 10px 24px; display: flex; align-items: center; gap: 12px; font-size: 14px;
+    }
+    #settingsBar input {
+      flex: 1; max-width: 500px; border: 1.5px solid #d1d5db; border-radius: 6px;
+      padding: 6px 10px; font-size: 13px; direction: ltr;
+    }
+    #settingsBar input.connected { border-color: #34d399; background: #f0fdf4; }
+    #settingsBar button {
+      padding: 6px 14px; background: var(--primary); color: white;
+      border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+    }
+    #settingsBar .status { font-size: 12px; color: var(--gray-600); }
+  </style>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary: #1a56db;
+      --primary-light: #e8f0fe;
+      --success: #057a55;
+      --success-light: #def7ec;
+      --danger: #c81e1e;
+      --danger-light: #fde8e8;
+      --warning: #c27803;
+      --warning-light: #fdf6b2;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --radius: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+    }
+
+    body {
+      font-family: -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+      min-height: 100vh;
+      font-size: 15px;
+    }
+
+    /* ===== Header ===== */
+    header {
+      background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%);
+      color: white;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+    header .subtitle { font-size: 13px; opacity: 0.8; margin-top: 2px; }
+
+    .year-selector {
+      display: flex;
+      gap: 6px;
+    }
+    .year-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      background: transparent;
+      color: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .year-btn:hover { background: rgba(255,255,255,0.15); }
+    .year-btn.active { background: white; color: var(--primary); border-color: white; }
+
+    /* ===== Layout ===== */
+    main { max-width: 1400px; margin: 0 auto; padding: 28px 20px; }
+
+    /* ===== Cards Grid ===== */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .kpi-card {
+      background: white;
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .kpi-card .label {
+      font-size: 13px;
+      color: var(--gray-600);
+      font-weight: 500;
+    }
+    .kpi-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .kpi-card .sub {
+      font-size: 13px;
+      color: var(--gray-600);
+    }
+    .kpi-card.positive .value { color: var(--success); }
+    .kpi-card.negative .value { color: var(--danger); }
+    .kpi-card.neutral .value { color: var(--primary); }
+    .kpi-card .icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    .kpi-card.positive .icon { background: var(--success-light); }
+    .kpi-card.negative .icon { background: var(--danger-light); }
+    .kpi-card.neutral .icon { background: var(--primary-light); }
+    .kpi-card.warning .icon { background: var(--warning-light); }
+    .kpi-card.warning .value { color: var(--warning); }
+
+    /* ===== Two columns ===== */
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 720px) {
+      .two-col { grid-template-columns: 1fr; }
+      .year-selector { flex-wrap: wrap; gap: 4px; }
+      .year-btn { padding: 4px 10px; font-size: 13px; }
+      main { padding: 16px 12px; }
+      header { padding: 0 16px; height: 56px; }
+      header h1 { font-size: 17px; }
+      .kpi-card { padding: 14px 16px; }
+      .kpi-card .value { font-size: 22px; }
+      .section-header { padding: 12px 14px; }
+      .data-table th, .data-table td { padding: 8px 8px; font-size: 12px; }
+      .expense-row { padding: 9px 14px; }
+      #settingsBar { flex-wrap: wrap; }
+      #settingsBar input { width: 100%; max-width: 100%; }
+      /* Safe area for iPhone notch */
+      header { padding-top: env(safe-area-inset-top); }
+      footer { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    }
+
+    /* ===== Section Card ===== */
+    .section-card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      border: 1px solid var(--gray-200);
+      overflow: hidden;
+    }
+    .section-card.full { margin-bottom: 28px; }
+    .section-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--gray-200);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .section-header h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+    .section-header .badge {
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .badge-blue { background: var(--primary-light); color: var(--primary); }
+    .badge-green { background: var(--success-light); color: var(--success); }
+    .badge-red { background: var(--danger-light); color: var(--danger); }
+
+    /* ===== Table ===== */
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th {
+      padding: 9px 10px;
+      text-align: right;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--gray-600);
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+      white-space: nowrap;
+    }
+    .data-table td {
+      padding: 10px 10px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--gray-100);
+      white-space: nowrap;
+    }
+    .data-table td:first-child {
+      white-space: normal;
+      min-width: 140px;
+      max-width: 200px;
+      word-break: break-word;
+    }
+    .data-table tr:last-child td { border-bottom: none; }
+    .data-table tr:hover td { background: var(--gray-50); }
+    .data-table .amount { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .data-table .paid { color: var(--success); }
+    .data-table .unpaid { color: var(--gray-300); }
+    .data-table .total-row td { background: var(--gray-50); font-weight: 700; }
+
+    /* Month pills */
+    .month-pills {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .pill.paid { background: var(--success-light); color: var(--success); }
+    .pill.unpaid { background: var(--gray-100); color: var(--gray-300); }
+
+    /* ===== Chart container ===== */
+    .chart-wrap { padding: 20px; height: 260px; position: relative; }
+
+    /* ===== Expense list ===== */
+    .expense-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 20px;
+      border-bottom: 1px solid var(--gray-100);
+      gap: 12px;
+    }
+    .expense-row:last-child { border-bottom: none; }
+    .expense-name { font-size: 14px; color: var(--gray-700); flex: 1; }
+    .expense-bar-wrap { flex: 2; height: 8px; background: var(--gray-100); border-radius: 4px; overflow: hidden; }
+    .expense-bar { height: 100%; background: var(--primary); border-radius: 4px; transition: width 0.4s; }
+    .expense-amount { font-size: 14px; font-weight: 600; color: var(--gray-800); min-width: 70px; text-align: left; }
+
+    /* ===== Balance history ===== */
+    .balance-history {
+      display: flex;
+      gap: 0;
+      padding: 20px;
+      justify-content: space-around;
+      align-items: flex-end;
+      height: 160px;
+    }
+    .history-bar-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      flex: 1;
+    }
+    .history-bar-outer {
+      width: 40px;
+      background: var(--gray-100);
+      border-radius: 6px;
+      position: relative;
+      overflow: visible;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .history-bar-inner {
+      width: 40px;
+      border-radius: 6px;
+      transition: height 0.5s;
+    }
+    .history-bar-label { font-size: 11px; color: var(--gray-600); font-weight: 600; }
+    .history-bar-value { font-size: 11px; font-weight: 700; }
+
+    /* ===== Footer ===== */
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--gray-600);
+      font-size: 13px;
+      border-top: 1px solid var(--gray-200);
+      margin-top: 12px;
+    }
+
+
+    /* Month selector */
+    .month-selector {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--gray-200);
+    }
+    .month-btn {
+      padding: 5px 12px;
+      border-radius: 16px;
+      border: 1.5px solid var(--gray-200);
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--gray-600);
+      transition: all 0.15s;
+    }
+    .month-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .month-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 200px;
+      color: var(--gray-600);
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🏢 ועד בית גבולות 2</h1>
+    <div class="subtitle">גבעתיים</div>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="year-selector" id="yearSelector"></div>
+    <span id="refreshStatus" style="font-size:11px;opacity:0.7;"></span>
+    <button onclick="loadData()" style="padding:6px 12px;border-radius:20px;border:1.5px solid rgba(255,255,255,0.4);background:transparent;color:white;cursor:pointer;font-size:16px;" title="רענן נתונים מגוגל שיטס">↻</button>
+    <button id="adminBtn" onclick="toggleAdmin()" style="padding:6px 14px;border-radius:20px;border:1.5px solid rgba(255,255,255,0.5);background:transparent;color:white;cursor:pointer;font-size:13px;">ניהול</button>
+  </div>
+</header>
+
+<div id="adminBar" style="display:none; background:#fef9c3; border-bottom:1px solid #fde68a; padding:10px 24px; display:none; align-items:center; gap:12px; font-size:14px; flex-wrap:wrap;">
+  <span>🔗 חיבור לגוגל שיטס:</span>
+  <input type="text" id="apiUrl" placeholder="הדבק כאן את ה-Web App URL של Apps Script..." style="flex:1;max-width:500px;border:1.5px solid #d1d5db;border-radius:6px;padding:6px 10px;font-size:13px;direction:ltr;" />
+  <button onclick="connectApi()" style="padding:6px 14px;background:var(--primary);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">חבר</button>
+  <span class="status" id="apiStatus" style="font-size:12px;color:var(--gray-600);"></span>
+  <button onclick="logout()" style="margin-right:auto;padding:6px 12px;background:#fee2e2;color:#c81e1e;border:none;border-radius:6px;cursor:pointer;font-size:13px;">יציאה ממצב עריכה</button>
+</div>
+<div id="toast"></div>
+
+<main>
+  <!-- KPIs -->
+  <div class="kpi-grid" id="kpiGrid">
+    <div class="loading">טוען נתונים...</div>
+  </div>
+
+  <!-- תשלומים + הוצאות גדולות -->
+  <div class="two-col">
+    <div class="section-card" id="tenantStatusCard">
+      <div class="section-header">
+        <h2>מצב תשלומים – דיירים</h2>
+        <span class="badge badge-blue" id="yearBadge"></span>
+      </div>
+      <div id="tenantStatusBody"></div>
+    </div>
+    <div class="section-card">
+      <div class="section-header">
+        <h2>הוצאות גדולות השנה</h2>
+      </div>
+      <div id="topExpenses"></div>
+    </div>
+  </div>
+
+  <!-- גרף חודשי -->
+  <div class="section-card full">
+    <div class="section-header">
+      <h2>הכנסות מול הוצאות – לפי חודש</h2>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+  </div>
+
+  <!-- טבלת הוצאות מפורטת -->
+  <div class="section-card full">
+    <div class="section-header">
+      <h2>הוצאות לפי קטגוריה וחודש</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="badge badge-red" id="expTotalBadge"></span>
+        <button id="addExpBtn" onclick="addExpenseRow()" style="display:none;padding:5px 12px;background:var(--primary);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">+ הוסף הוצאה</button>
+      </div>
+    </div>
+    <div class="month-selector" id="expMonthSelector"></div>
+    <div style="overflow-x:auto">
+      <table class="data-table" id="expensesTable"></table>
+    </div>
+  </div>
+
+  <!-- היסטוריה -->
+  <div class="section-card full">
+    <div class="section-header">
+      <h2>יתרה שנתית בקופה</h2>
+    </div>
+    <div class="chart-wrap" style="height:320px">
+      <canvas id="historyChart"></canvas>
+    </div>
+  </div>
+  <div class="section-card full">
+    <div class="section-header">
+      <h2>סיכום שנים</h2>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="data-table" id="historyTable"></table>
+    </div>
+    </div>
+  </div>
+</main>
+
+<footer>ועד בית גבולות 2, גבעתיים · נתונים מעודכנים עד מאי 2026</footer>
+
+<script>
+const MONTHS = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+const MONTH_SHORT = ['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
+
+let DATA = {};
+let currentYear = '2026';
+let monthlyChart = null;
+let historyChart = null;
+let selectedMonth = null;
+const DEFAULT_API = 'https://script.google.com/macros/s/AKfycbwVPslo0Lgg6RDkPDeuq2rMaga-ASgBKUvRpLHGmrqSUDnJ0rIAJd5Mo4N338i36DgdyA/exec';
+localStorage.setItem('vaad_api_url', DEFAULT_API);
+let API_URL = DEFAULT_API;
+let isAdmin = sessionStorage.getItem('vaad_admin') === '1';
+
+const ADMIN_HASH = '7f9b2c4d1e8a3f6c'; // ישונה בהגדרה
+
+function toggleAdmin() {
+  if (isAdmin) { logout(); return; }
+  const pwd = prompt('הזן סיסמת ניהול:');
+  if (!pwd) return;
+  // Simple hash check (SHA-lite via btoa)
+  const h = btoa(pwd).split('').reduce((a,c)=>a+c.charCodeAt(0),0).toString(16);
+  const stored = localStorage.getItem('vaad_admin_hash');
+  if (!stored) {
+    // First time — set the password
+    localStorage.setItem('vaad_admin_hash', h);
+    sessionStorage.setItem('vaad_admin', '1');
+    isAdmin = true;
+    applyAdminMode();
+    showToast('✅ סיסמה נשמרה — אתה במצב ניהול');
+  } else if (h === stored) {
+    sessionStorage.setItem('vaad_admin', '1');
+    isAdmin = true;
+    applyAdminMode();
+    showToast('✅ כניסת מנהל');
+  } else {
+    showToast('❌ סיסמה שגויה');
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('vaad_admin');
+  isAdmin = false;
+  applyAdminMode();
+  showToast('יצאת ממצב עריכה');
+}
+
+function applyAdminMode() {
+  const bar = document.getElementById('adminBar');
+  const btn = document.getElementById('adminBtn');
+  const addBtn = document.getElementById('addExpBtn');
+  if (isAdmin) {
+    bar.style.display = 'flex';
+    btn.style.background = 'rgba(255,255,255,0.25)';
+    btn.textContent = '✏️ מנהל';
+    if (addBtn) addBtn.style.display = 'inline-block';
+  } else {
+    bar.style.display = 'none';
+    btn.style.background = 'transparent';
+    btn.textContent = 'ניהול';
+    if (addBtn) addBtn.style.display = 'none';
+  }
+  render();
+}
+
+function addExpenseRow() {
+  const name = prompt('שם הקטגוריה (למשל: תיקון מעלית):');
+  if (!name || !name.trim()) return;
+  const d = getYearData();
+  if (d.expenses.find(e => (e.category||e.name) === name.trim())) {
+    showToast('קטגוריה זו כבר קיימת');
+    return;
+  }
+  const months = {};
+  MONTHS.forEach(m => months[m] = 0);
+  d.expenses.push({ category: name.trim(), months, total: 0 });
+  renderExpensesTab();
+  showToast('✅ נוספה קטגוריה: ' + name.trim());
+}
+
+// ── API helpers ──
+function connectApi() {
+  const url = document.getElementById('apiUrl').value.trim();
+  if (!url) return;
+  API_URL = url;
+  localStorage.setItem('vaad_api_url', url);
+  document.getElementById('apiStatus').textContent = '⏳ בודק חיבור...';
+  fetch(API_URL)
+    .then(r => r.json())
+    .then(d => {
+      DATA = d;
+      document.getElementById('apiUrl').classList.add('connected');
+      document.getElementById('apiStatus').textContent = '✅ מחובר לגוגל שיטס – נתונים עודכנו';
+      render();
+    })
+    .catch(() => {
+      document.getElementById('apiStatus').textContent = '❌ שגיאה – בדוק את ה-URL';
+    });
+}
+
+async function saveToSheet(payload) {
+  if (!API_URL) return;
+  try {
+    await fetch(API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      headers: {'Content-Type': 'text/plain'}
+    });
+    showToast('✅ נשמר בגוגל שיטס');
+  } catch(e) {
+    showToast('❌ שגיאה בשמירה');
+  }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── Inline cell editing ──
+function makeEditable(td, onSave) {
+  td.classList.add('editable');
+  td.addEventListener('click', function() {
+    if (!isAdmin) { showToast('🔒 התחבר כמנהל כדי לערוך'); return; }
+    if (td.querySelector('input')) return;
+    const prev = td.dataset.raw || '0';
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.className = 'cell-input';
+    inp.value = prev === '0' ? '' : prev;
+    inp.style.width = '70px';
+    td.textContent = '';
+    td.appendChild(inp);
+    inp.focus(); inp.select();
+    async function commit() {
+      const val = inp.value.trim() === '' ? 0 : parseFloat(inp.value);
+      if (isNaN(val)) { td.textContent = prev === '0' ? '—' : fmt(parseFloat(prev)); return; }
+      inp.classList.add('saving');
+      td.dataset.raw = val;
+      td.textContent = val === 0 ? '—' : fmt(val);
+      td.classList.add('editable');
+      await onSave(val);
+    }
+    inp.addEventListener('blur', commit);
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { td.textContent = prev === '0' ? '—' : fmt(parseFloat(prev)); } });
+  });
+}
+
+function fmt(n) {
+  if (n === null || n === undefined) return '—';
+  return new Intl.NumberFormat('he-IL', {style:'currency', currency:'ILS', maximumFractionDigits:0}).format(n);
+}
+function fmtN(n) {
+  return new Intl.NumberFormat('he-IL', {maximumFractionDigits:2}).format(n);
+}
+
+const FALLBACK_DATA = {"2022": {"tenants": [{"name": "ג'ורג'י", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "מוניס", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "לוי", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "שם טוב", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 0, "אוגוסט": 116, "ספטמבר": 323, "אוקטובר": 263.71000000000004, "נובמבר": 270, "דצמבר": 107}, "total": 2159.71}], "expenses": [{"name": "ביטוח אילון", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 836, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 836}, {"name": "תרבות הדיור", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 116, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 116}, {"name": "ריסוס", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 300, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 300}, {"name": "מנקה", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 200, "אוגוסט": 200, "ספטמבר": 200, "אוקטובר": 200, "נובמבר": 200, "דצמבר": 200}, "total": 2400}, {"name": "גנן", "months": {"ינואר": 250, "פברואר": 250, "מרץ": 250, "אפריל": 300, "מאי": 300, "יוני": 0, "יולי": 300, "אוגוסט": 0, "ספטמבר": 300, "אוקטובר": 300, "נובמבר": 0, "דצמבר": 300}, "total": 2550}, {"name": "תשלום חשמל", "months": {"ינואר": 221.4, "פברואר": 0, "מרץ": 244.82, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 486.24, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 230.71, "נובמבר": 0, "דצמבר": 0}, "total": 1183.17}, {"name": "החלפות ותיקונים ומנורות", "months": {"ינואר": 0, "פברואר": 105, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 72, "דצמבר": 0}, "total": 177}, {"name": "תיקון פיצוץ צינור ראשי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "סתימת ביוב", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "החלפת תאורת חניה ומדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 480, "דצמבר": 0}, "total": 480}, {"name": "איטום", "months": {"ינואר": 200, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 200}, {"name": "תיקון בור חניה+חול מילוי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 300, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 300}, {"name": "שונות- ריח לחדר מדרגות ואיטום שירותים", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 28, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 33, "נובמבר": 190, "דצמבר": 0}, "total": 251}], "balance": 0}, "2023": {"tenants": [{"name": "ג'ורג'י", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "מוניס", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "לוי", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "שם טוב", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}], "expenses": [{"name": "ביטוח אילון", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 832, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 832}, {"name": "תרבות הדיור", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 124, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 124}, {"name": "ריסוס", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 300, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 300}, {"name": "מנקה", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 200, "אוגוסט": 200, "ספטמבר": 200, "אוקטובר": 200, "נובמבר": 200, "דצמבר": 200}, "total": 2400}, {"name": "גנן", "months": {"ינואר": 300, "פברואר": 0, "מרץ": 300, "אפריל": 0, "מאי": 300, "יוני": 300, "יולי": 300, "אוגוסט": 0, "ספטמבר": 300, "אוקטובר": 448, "נובמבר": 300, "דצמבר": 0}, "total": 2548}, {"name": "תשלום חשמל", "months": {"ינואר": 250.13, "פברואר": 268.58, "מרץ": 262.59, "אפריל": 0, "מאי": 0, "יוני": 236, "יולי": 224.95, "אוגוסט": 0, "ספטמבר": 217, "אוקטובר": 0, "נובמבר": 290.22, "דצמבר": 0}, "total": 1749.47}, {"name": "החלפות ותיקונים ומנורות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 50, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 50}, {"name": "תיקון פיצוץ צינור ראשי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "סתימת ביוב", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "החלפת תאורת חניה ומדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "איטום", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "תיקון בור חניה+חול מילוי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "שונות- ריח לחדר מדרגות ואיטום שירותים", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 20, "דצמבר": 0}, "total": 20}, {"name": "בזק", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 70.6, "מאי": 0, "יוני": 70.22, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 140.82}], "balance": 0}, "2024": {"tenants": [{"name": "ג'ורג'י", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "מוניס", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "עידו ואיל (לוי)", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "שם טוב", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}], "expenses": [{"name": "ביטוח אילון", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "תרבות הדיור", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "ריסוס", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 300, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 300}, {"name": "מנקה", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 200, "אוגוסט": 200, "ספטמבר": 200, "אוקטובר": 200, "נובמבר": 200, "דצמבר": 200}, "total": 2400}, {"name": "גנן", "months": {"ינואר": 300, "פברואר": 371, "מרץ": 35, "אפריל": 300, "מאי": 0, "יוני": 350, "יולי": 0, "אוגוסט": 350, "ספטמבר": 350, "אוקטובר": 0, "נובמבר": 350, "דצמבר": 0}, "total": 2406}, {"name": "תשלום חשמל", "months": {"ינואר": 0, "פברואר": 260.31, "מרץ": 0, "אפריל": 273.49, "מאי": 0, "יוני": 231.27, "יולי": 0, "אוגוסט": 200.08, "ספטמבר": 177.23, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 262.59}, "total": 1404.9699999999998}, {"name": "החלפות ותיקונים ומנורות", "months": {"ינואר": 50, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 50}, {"name": "תיקון פיצוץ צינור ראשי", "months": {"ינואר": 750, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 750}, {"name": "סתימת ביוב", "months": {"ינואר": 0, "פברואר": 55, "מרץ": 0, "אפריל": 0, "מאי": 300, "יוני": 57, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 412}, {"name": "תיקון אינטרקום", "months": {"ינואר": 700, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 700}, {"name": "החלפת תאורת חניה ומדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 22, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 22}, {"name": "שונות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 25, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 25}, {"name": "צביעת חדר מדרגות", "months": {"ינואר": 390, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 390}, {"name": "ריח לחדר מדרגות ואיטום שירותים", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 20, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 16, "אוקטובר": 0, "נובמבר": 20, "דצמבר": 0}, "total": 56}, {"name": "בזק", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}], "balance": 0}, "2025": {"tenants": [{"name": "ג'ורג'י", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "מוניס", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "עידו ואיל (לוי)", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}, {"name": "שם טוב", "months": {"ינואר": 180, "פברואר": 180, "מרץ": 180, "אפריל": 180, "מאי": 180, "יוני": 180, "יולי": 180, "אוגוסט": 180, "ספטמבר": 180, "אוקטובר": 180, "נובמבר": 180, "דצמבר": 180}, "total": 2160}], "expenses": [{"name": "ביטוח אילון", "months": {"ינואר": 520, "פברואר": 520, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1040}, {"name": "תרבות הדיור", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "ריסוס", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 450, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 450}, {"name": "מנקה", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 200, "אוגוסט": 200, "ספטמבר": 200, "אוקטובר": 200, "נובמבר": 200, "דצמבר": 200}, "total": 2400}, {"name": "גנן", "months": {"ינואר": 350, "פברואר": 0, "מרץ": 350, "אפריל": 0, "מאי": 444, "יוני": 350, "יולי": 0, "אוגוסט": 350, "ספטמבר": 350, "אוקטובר": 350, "נובמבר": 0, "דצמבר": 350}, "total": 2894}, {"name": "תשלום חשמל", "months": {"ינואר": 0, "פברואר": 242, "מרץ": 0, "אפריל": 225.75, "מאי": 0, "יוני": 264.96, "יולי": 650, "אוגוסט": 246.68, "ספטמבר": 0, "אוקטובר": 261, "נובמבר": 224, "דצמבר": 0}, "total": 2114.3900000000003}, {"name": "החלפות ותיקונים ומנורות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "תיקון פיצוץ צינור ראשי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "סתימת ביוב", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 431, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 400}, "total": 831}, {"name": "תיקון אינטרקום", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "החלפת תאורת חניה ומדרגות", "months": {"ינואר": 35, "פברואר": 30, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 19, "יולי": 35, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 119}, {"name": "תיקון כביש", "months": {"ינואר": 0, "פברואר": 95, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 263, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 358}, {"name": "צביעת חדר מדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "ריח לחדר מדרגות ואיטום שירותים", "months": {"ינואר": 30, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 24, "יולי": 0, "אוגוסט": 24, "ספטמבר": 30, "אוקטובר": 34, "נובמבר": 0, "דצמבר": 0}, "total": 142}, {"name": "שונות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 120, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 25, "דצמבר": 0}, "total": 145}], "balance": 0}, "2026": {"tenants": [{"name": "ג'ורג'י", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "מוניס", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1200}, {"name": "עידו ואיל (לוי)", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1200}, {"name": "שם טוב", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1200}], "expenses": [{"name": "ביטוח אילון", "months": {"ינואר": 305, "פברואר": 305, "מרץ": 305, "אפריל": 305, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1220}, {"name": "תרבות הדיור", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "ריסוס", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "מנקה", "months": {"ינואר": 200, "פברואר": 200, "מרץ": 200, "אפריל": 200, "מאי": 200, "יוני": 200, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1200}, {"name": "גנן", "months": {"ינואר": 0, "פברואר": 350, "מרץ": 0, "אפריל": 350, "מאי": 350, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1050}, {"name": "תשלום חשמל", "months": {"ינואר": 0, "פברואר": 265, "מרץ": 0, "אפריל": 197.3, "מאי": 0, "יוני": 280.56, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 742.86}, {"name": "החלפות ותיקונים ומנורות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "תיקון פיצוץ צינור ראשי", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "סתימת ביוב", "months": {"ינואר": 0, "פברואר": 600, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 600}, {"name": "תיקון אינטרקום", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 1001, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 1001}, {"name": "החלפת תאורת חניה ומדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "תיקון כביש", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "צביעת חדר מדרגות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "ריח לחדר מדרגות ואיטום שירותים", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}, {"name": "שונות", "months": {"ינואר": 0, "פברואר": 0, "מרץ": 0, "אפריל": 0, "מאי": 0, "יוני": 0, "יולי": 0, "אוגוסט": 0, "ספטמבר": 0, "אוקטובר": 0, "נובמבר": 0, "דצמבר": 0}, "total": 0}], "balance": 0}};
+
+async function loadData() {
+  const kpiGrid = document.getElementById('kpiGrid');
+  kpiGrid.innerHTML = '<div class="loading">טוען נתונים מגוגל שיטס...</div>';
+  try {
+    const r = await fetch(API_URL);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    if (!d || typeof d !== 'object') throw new Error('invalid data');
+    // שמור יתרות מה-fallback אם ה-API החזיר 0
+    Object.keys(FALLBACK_DATA).forEach(function(y) {
+      if (d[y] && d[y].balance === 0 && FALLBACK_DATA[y] && FALLBACK_DATA[y].balance !== 0) {
+        d[y].balance = FALLBACK_DATA[y].balance;
+      }
+    });
+    DATA = d;
+    document.getElementById('refreshStatus').textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
+  } catch(e) {
+    DATA = FALLBACK_DATA;
+    document.getElementById('refreshStatus').textContent = 'מצב לא מקוון';
+  }
+  init();
+}
+
+function init() {
+  if (API_URL) {
+    document.getElementById('apiUrl').value = API_URL;
+    document.getElementById('apiUrl').classList.add('connected');
+    document.getElementById('apiStatus').textContent = '✅ מחובר לגוגל שיטס';
+  }
+  buildYearSelector();
+  render();
+}
+
+function buildYearSelector() {
+  const years = Object.keys(DATA).sort();
+  const el = document.getElementById('yearSelector');
+  el.innerHTML = years.map(y =>
+    `<button class="year-btn ${y===currentYear?'active':''}" onclick="setYear('${y}')">${y}</button>`
+  ).join('');
+}
+
+function setYear(y) {
+  currentYear = y;
+  document.querySelectorAll('.year-btn').forEach(b => b.classList.toggle('active', b.textContent===y));
+  render();
+}
+
+function render() {
+  renderKPIs();
+  renderTenantStatus();
+  renderTopExpenses();
+  renderMonthlyChart();
+  renderExpensesTab();
+  renderHistory();
+}
+
+function getYearData() {
+  return DATA[currentYear] || { tenants: [], expenses: [], balance: 0 };
+}
+
+function calcTotals(d) {
+  const totalIncome = d.tenants.reduce((s,t) => s + t.total, 0);
+  const totalExpenses = d.expenses.reduce((s,e) => s + e.total, 0);
+  const net = totalIncome - totalExpenses;
+  return { totalIncome, totalExpenses, net };
+}
+
+function renderKPIs() {
+  const d = getYearData();
+  const { totalIncome, totalExpenses, net } = calcTotals(d);
+  const balance = d.balance || 0;
+  const balClass = balance >= 0 ? 'positive' : 'negative';
+  const netClass = net >= 0 ? 'positive' : 'negative';
+
+  // Count months with data
+  const monthsWithIncome = MONTHS.filter(m => d.tenants.some(t => t.months[m] > 0)).length;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-card ${balClass}">
+      <div class="icon">${balance >= 0 ? '💰' : '📉'}</div>
+      <div class="label">יתרה בקופה</div>
+      <div class="value">${fmt(balance)}</div>
+      <div class="sub">נכון לתחילת ${currentYear}</div>
+    </div>
+    <div class="kpi-card neutral">
+      <div class="icon">📥</div>
+      <div class="label">סה"כ הכנסות ${currentYear}</div>
+      <div class="value">${fmt(totalIncome)}</div>
+      <div class="sub">${monthsWithIncome} חודשים · ${d.tenants.length} דיירים</div>
+    </div>
+    <div class="kpi-card negative">
+      <div class="icon">📤</div>
+      <div class="label">סה"כ הוצאות ${currentYear}</div>
+      <div class="value">${fmt(totalExpenses)}</div>
+      <div class="sub">${d.expenses.length} קטגוריות</div>
+    </div>
+    <div class="kpi-card ${netClass}">
+      <div class="icon">${net >= 0 ? '✅' : '⚠️'}</div>
+      <div class="label">מאזן ${currentYear}</div>
+      <div class="value">${fmt(net)}</div>
+      <div class="sub">${net >= 0 ? 'עודף' : 'גירעון'} השנה</div>
+    </div>
+  `;
+}
+
+function renderTenantStatus() {
+  const d = getYearData();
+  document.getElementById('yearBadge').textContent = currentYear;
+
+  const container = document.getElementById('tenantStatusBody');
+  container.innerHTML = '';
+
+  d.tenants.forEach(t => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:12px 20px;border-bottom:1px solid var(--gray-100)';
+
+    const header = document.createElement('div');
+    header.style.cssText = 'display:flex;justify-content:space-between;margin-bottom:8px';
+    header.innerHTML = `<span style="font-weight:600;font-size:15px">${t.name}</span>
+      <span id="ttotal-${t.name}" style="font-weight:700;color:var(--success)">${fmt(t.total)}</span>`;
+    wrap.appendChild(header);
+
+    const pills = document.createElement('div');
+    pills.className = 'month-pills';
+
+    MONTHS.forEach((m, i) => {
+      const v = t.months[m] || 0;
+      const pill = document.createElement('div');
+      pill.className = `pill ${v > 0 ? 'paid' : 'unpaid'}`;
+      pill.title = `${m}: לחץ לעריכה`;
+      pill.textContent = MONTH_SHORT[i];
+      pill.style.cursor = 'pointer';
+      pill.addEventListener('click', () => {
+        if (!isAdmin) { showToast('🔒 התחבר כמנהל כדי לערוך'); return; }
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.style.cssText = 'width:50px;font-size:11px;border:1.5px solid var(--primary);border-radius:4px;padding:1px 3px;text-align:center';
+        inp.value = v || '';
+        pill.replaceWith(inp);
+        inp.focus(); inp.select();
+        async function commit() {
+          const val = inp.value.trim() === '' ? 0 : parseFloat(inp.value) || 0;
+          t.months[m] = val;
+          t.total = MONTHS.reduce((s, mo) => s + (t.months[mo] || 0), 0);
+          document.getElementById(`ttotal-${t.name}`).textContent = fmt(t.total);
+          const newPill = document.createElement('div');
+          newPill.className = `pill ${val > 0 ? 'paid' : 'unpaid'}`;
+          newPill.textContent = MONTH_SHORT[i];
+          newPill.title = `${m}: לחץ לעריכה`;
+          newPill.style.cursor = 'pointer';
+          inp.replaceWith(newPill);
+          newPill.addEventListener('click', newPill._handler = () => pill.click());
+          if (API_URL) await saveToSheet({type:'payment', year:currentYear, name:t.name, month:m, value:val});
+          renderKPIs(); renderMonthlyChart();
+        }
+        inp.addEventListener('blur', commit);
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); if (e.key === 'Escape') { inp.replaceWith(pill); } });
+      });
+      pills.appendChild(pill);
+    });
+
+    wrap.appendChild(pills);
+    container.appendChild(wrap);
+  });
+}
+
+function renderTopExpenses() {
+  const d = getYearData();
+  const sorted = [...d.expenses].sort((a,b) => b.total - a.total).slice(0, 8);
+  const max = sorted[0]?.total || 1;
+
+  const rows = sorted.map(e => `
+    <div class="expense-row">
+      <div class="expense-name">${e.category||e.name}</div>
+      <div class="expense-bar-wrap">
+        <div class="expense-bar" style="width:${Math.max(4,(e.total/max)*100)}%"></div>
+      </div>
+      <div class="expense-amount">${fmt(e.total)}</div>
+    </div>
+  `).join('');
+
+  document.getElementById('topExpenses').innerHTML = rows || '<div style="padding:20px;color:var(--gray-600)">אין נתונים</div>';
+}
+
+function renderMonthlyChart() {
+  const d = getYearData();
+  const incomeByMonth = MONTHS.map(m => d.tenants.reduce((s,t) => s+(t.months[m]||0), 0));
+  const expByMonth = MONTHS.map(m => d.expenses.reduce((s,e) => s+(e.months[m]||0), 0));
+
+  const ctx = document.getElementById('monthlyChart').getContext('2d');
+  if (monthlyChart) monthlyChart.destroy();
+  monthlyChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: MONTH_SHORT,
+      datasets: [
+        {
+          label: 'הכנסות',
+          data: incomeByMonth,
+          backgroundColor: '#34d399',
+          borderRadius: 5,
+        },
+        {
+          label: 'הוצאות',
+          data: expByMonth,
+          backgroundColor: '#f87171',
+          borderRadius: 5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', rtl: true, labels: { font: { family: '-apple-system, sans-serif' } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: v => fmt(v) },
+          grid: { color: '#f3f4f6' }
+        },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderIncomeTable() {
+  const d = getYearData();
+  const totalIncome = d.tenants.reduce((s,t) => s + t.total, 0);
+  document.getElementById('incomeTotalBadge').textContent = fmt(totalIncome);
+
+  const headerCells = ['דייר', ...MONTHS, 'סה"כ'].map(h => `<th>${h}</th>`).join('');
+  const bodyRows = d.tenants.map(t => {
+    const cells = MONTHS.map(m => {
+      const v = t.months[m];
+      return `<td class="amount ${v>0?'paid':'unpaid'}">${v>0?fmt(v):'—'}</td>`;
+    }).join('');
+    return `<tr><td style="font-weight:600">${t.name}</td>${cells}<td class="amount paid">${fmt(t.total)}</td></tr>`;
+  }).join('');
+
+  // Total row
+  const totCells = MONTHS.map(m => {
+    const s = d.tenants.reduce((a,t) => a+(t.months[m]||0), 0);
+    return `<td class="amount">${s>0?fmt(s):'—'}</td>`;
+  }).join('');
+
+  document.getElementById('incomeTable').innerHTML = `
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>
+      ${bodyRows}
+      <tr class="total-row"><td>סה"כ</td>${totCells}<td class="amount">${fmt(totalIncome)}</td></tr>
+    </tbody>
+  `;
+}
+
+function renderExpensesTab() {
+  const d = getYearData();
+  const totalExp = d.expenses.reduce((s,e) => s + e.total, 0);
+  document.getElementById('expTotalBadge').textContent = fmt(totalExp);
+
+  // Month selector
+  const activeMonths = MONTHS.filter(m => d.expenses.some(e => e.months[m] > 0));
+  const msEl = document.getElementById('expMonthSelector');
+  msEl.innerHTML = `<button class="month-btn ${selectedMonth===null?'active':''}" onclick="filterExpMonth(null)">כל החודשים</button>` +
+    activeMonths.map(m => `<button class="month-btn ${selectedMonth===m?'active':''}" onclick="filterExpMonth('${m}')">${m}</button>`).join('');
+
+  renderExpensesTable();
+}
+
+function filterExpMonth(m) {
+  selectedMonth = m;
+  document.querySelectorAll('.month-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === (m || 'כל החודשים'));
+  });
+  renderExpensesTable();
+}
+
+function renderExpensesTable() {
+  const d = getYearData();
+  const cols = selectedMonth ? [selectedMonth] : MONTHS;
+  const headerCells = ['קטגוריה', ...cols, 'סה"כ'].map(h => `<th>${h}</th>`).join('');
+
+  const activeExp = d.expenses.filter(e => {
+    if (selectedMonth) return (e.months[selectedMonth] || 0) > 0;
+    return e.total > 0;
+  });
+
+  // Build table with DOM (for editable cells)
+  const table = document.getElementById('expensesTable');
+  const thead = `<thead><tr>${headerCells}</tr></thead>`;
+  const tbody = document.createElement('tbody');
+
+  activeExp.forEach(e => {
+    const tr = document.createElement('tr');
+    const catTd = document.createElement('td');
+    catTd.style.fontWeight = '500';
+    catTd.textContent = e.category || e.name;
+    tr.appendChild(catTd);
+
+    cols.forEach(m => {
+      const v = e.months[m] || 0;
+      const td = document.createElement('td');
+      td.className = 'amount';
+      td.textContent = v > 0 ? fmt(v) : '—';
+      td.dataset.raw = v;
+      makeEditable(td, async (val) => {
+        e.months[m] = val;
+        e.total = MONTHS.reduce((s, mo) => s + (e.months[mo] || 0), 0);
+        renderKPIs(); renderTopExpenses(); renderMonthlyChart();
+        if (API_URL) await saveToSheet({type:'expense', year:currentYear, name:e.category||e.name, month:m, value:val});
+      });
+      tr.appendChild(td);
+    });
+
+    const totalVal = selectedMonth ? (e.months[selectedMonth]||0) : e.total;
+    const totalTd = document.createElement('td');
+    totalTd.className = 'amount';
+    totalTd.style.color = 'var(--danger)';
+    totalTd.textContent = fmt(totalVal);
+    tr.appendChild(totalTd);
+    tbody.appendChild(tr);
+  });
+
+  // Totals row
+  const totRow = document.createElement('tr');
+  totRow.className = 'total-row';
+  const totLabel = document.createElement('td');
+  totLabel.textContent = 'סה"כ';
+  totRow.appendChild(totLabel);
+  cols.forEach(m => {
+    const s = d.expenses.reduce((a,e2) => a+(e2.months[m]||0), 0);
+    const td = document.createElement('td');
+    td.className = 'amount';
+    td.textContent = s > 0 ? fmt(s) : '—';
+    totRow.appendChild(td);
+  });
+  const grandTotal = selectedMonth
+    ? d.expenses.reduce((a,e) => a+(e.months[selectedMonth]||0), 0)
+    : d.expenses.reduce((a,e) => a+e.total, 0);
+  const gtTd = document.createElement('td');
+  gtTd.className = 'amount'; gtTd.style.color = 'var(--danger)';
+  gtTd.textContent = fmt(grandTotal);
+  totRow.appendChild(gtTd);
+  tbody.appendChild(totRow);
+
+  table.innerHTML = thead;
+  table.appendChild(tbody);
+}
+
+function renderHistory() {
+  const years = Object.keys(DATA).sort();
+
+  // Chart
+  const balances = years.map(y => DATA[y].balance || 0);
+  const incomes = years.map(y => DATA[y].tenants.reduce((s,t) => s+t.total, 0));
+  const expenses = years.map(y => DATA[y].expenses.reduce((s,e) => s+e.total, 0));
+
+  const ctx = document.getElementById('historyChart').getContext('2d');
+  if (historyChart) historyChart.destroy();
+  historyChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: years,
+      datasets: [
+        {
+          label: 'יתרה בקופה',
+          data: balances,
+          borderColor: '#1a56db',
+          backgroundColor: 'rgba(26,86,219,0.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 5,
+        },
+        {
+          label: 'הכנסות',
+          data: incomes,
+          borderColor: '#34d399',
+          backgroundColor: 'rgba(52,211,153,0.08)',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 5,
+        },
+        {
+          label: 'הוצאות',
+          data: expenses,
+          borderColor: '#f87171',
+          backgroundColor: 'rgba(248,113,113,0.08)',
+          fill: false,
+          tension: 0.3,
+          pointRadius: 5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', rtl: true },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } }
+      },
+      scales: {
+        y: { ticks: { callback: v => fmt(v) }, grid: { color: '#f3f4f6' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+
+  // Summary table
+  const headerCells = ['שנה','הכנסות','הוצאות','מאזן שנתי','יתרה בקופה'].map(h => `<th>${h}</th>`).join('');
+  const rows = years.map(y => {
+    const d = DATA[y];
+    const inc = d.tenants.reduce((s,t) => s+t.total, 0);
+    const exp = d.expenses.reduce((s,e) => s+e.total, 0);
+    const net = inc - exp;
+    const bal = d.balance || 0;
+    return `<tr>
+      <td style="font-weight:700">${y}</td>
+      <td class="amount paid">${fmt(inc)}</td>
+      <td class="amount" style="color:var(--danger)">${fmt(exp)}</td>
+      <td class="amount" style="font-weight:700;color:${net>=0?'var(--success)':'var(--danger)'}">${fmt(net)}</td>
+      <td class="amount" style="font-weight:700;color:${bal>=0?'var(--success)':'var(--danger)'}">${fmt(bal)}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('historyTable').innerHTML = `
+    <thead><tr>${headerCells}</tr></thead>
+    <tbody>${rows}</tbody>
+  `;
+}
+
+loadData();
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => { if(regs.length > 0) { regs.forEach(r => r.unregister()); location.reload(true); } });
+  }
+</script>
+</body>
+</html>
