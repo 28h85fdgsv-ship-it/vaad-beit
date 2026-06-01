@@ -1,0 +1,16 @@
+{
+  "name": "ועד בית גבולות 2",
+  "short_name": "ועד בית",
+  "description": "ניהול ועד בית גבולות 2, גבעתיים",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a56db",
+  "theme_color": "#1a56db",
+  "orientation": "portrait-primary",
+  "lang": "he",
+  "dir": "rtl",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
