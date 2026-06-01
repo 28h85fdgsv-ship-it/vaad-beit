@@ -622,6 +622,12 @@ async function loadData() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     if (!d || typeof d !== 'object') throw new Error('invalid data');
+    // שמור יתרות מה-fallback אם ה-API החזיר 0
+    Object.keys(FALLBACK_DATA).forEach(function(y) {
+      if (d[y] && d[y].balance === 0 && FALLBACK_DATA[y] && FALLBACK_DATA[y].balance !== 0) {
+        d[y].balance = FALLBACK_DATA[y].balance;
+      }
+    });
     DATA = d;
     document.getElementById('refreshStatus').textContent = 'עודכן: ' + new Date().toLocaleTimeString('he-IL');
   } catch(e) {
