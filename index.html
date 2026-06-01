@@ -524,7 +524,7 @@ function addExpenseRow() {
   const name = prompt('שם הקטגוריה (למשל: תיקון מעלית):');
   if (!name || !name.trim()) return;
   const d = getYearData();
-  if (d.expenses.find(e => e.category === name.trim())) {
+  if (d.expenses.find(e => (e.category||e.name) === name.trim())) {
     showToast('קטגוריה זו כבר קיימת');
     return;
   }
@@ -780,7 +780,7 @@ function renderTopExpenses() {
 
   const rows = sorted.map(e => `
     <div class="expense-row">
-      <div class="expense-name">${e.category}</div>
+      <div class="expense-name">${e.category||e.name}</div>
       <div class="expense-bar-wrap">
         <div class="expense-bar" style="width:${Math.max(4,(e.total/max)*100)}%"></div>
       </div>
@@ -910,7 +910,7 @@ function renderExpensesTable() {
     const tr = document.createElement('tr');
     const catTd = document.createElement('td');
     catTd.style.fontWeight = '500';
-    catTd.textContent = e.category;
+    catTd.textContent = e.category || e.name;
     tr.appendChild(catTd);
 
     cols.forEach(m => {
@@ -923,7 +923,7 @@ function renderExpensesTable() {
         e.months[m] = val;
         e.total = MONTHS.reduce((s, mo) => s + (e.months[mo] || 0), 0);
         renderKPIs(); renderTopExpenses(); renderMonthlyChart();
-        if (API_URL) await saveToSheet({type:'expense', year:currentYear, name:e.category, month:m, value:val});
+        if (API_URL) await saveToSheet({type:'expense', year:currentYear, name:e.category||e.name, month:m, value:val});
       });
       tr.appendChild(td);
     });
