@@ -420,7 +420,10 @@
   <div class="section-card full">
     <div class="section-header">
       <h2>הוצאות לפי קטגוריה וחודש</h2>
-      <span class="badge badge-red" id="expTotalBadge"></span>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="badge badge-red" id="expTotalBadge"></span>
+        <button id="addExpBtn" onclick="addExpenseRow()" style="display:none;padding:5px 12px;background:var(--primary);color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">+ הוסף הוצאה</button>
+      </div>
     </div>
     <div class="month-selector" id="expMonthSelector"></div>
     <div style="overflow-x:auto">
@@ -498,17 +501,34 @@ function logout() {
 function applyAdminMode() {
   const bar = document.getElementById('adminBar');
   const btn = document.getElementById('adminBtn');
+  const addBtn = document.getElementById('addExpBtn');
   if (isAdmin) {
     bar.style.display = 'flex';
     btn.style.background = 'rgba(255,255,255,0.25)';
     btn.textContent = '✏️ מנהל';
+    if (addBtn) addBtn.style.display = 'inline-block';
   } else {
     bar.style.display = 'none';
     btn.style.background = 'transparent';
     btn.textContent = 'ניהול';
+    if (addBtn) addBtn.style.display = 'none';
   }
-  // Re-render to show/hide editable cells
   render();
+}
+
+function addExpenseRow() {
+  const name = prompt('שם הקטגוריה (למשל: תיקון מעלית):');
+  if (!name || !name.trim()) return;
+  const d = getYearData();
+  if (d.expenses.find(e => e.category === name.trim())) {
+    showToast('קטגוריה זו כבר קיימת');
+    return;
+  }
+  const months = {};
+  MONTHS.forEach(m => months[m] = 0);
+  d.expenses.push({ category: name.trim(), months, total: 0 });
+  renderExpensesTab();
+  showToast('✅ נוספה קטגוריה: ' + name.trim());
 }
 
 // ── API helpers ──
